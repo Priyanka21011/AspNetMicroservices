@@ -1,6 +1,6 @@
-﻿using System;
+﻿using Discount.Grpc.Protos;
+using System;
 using System.Threading.Tasks;
-using Discount.Grpc.Protos;
 
 namespace Basket.API.GrpcServices
 {
