@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Ordering.Application.Contracts.Infrastructure;
 using Ordering.Application.Contracts.Persistence;
+using Ordering.Application.Models;
 using Ordering.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace Ordering.Application.Features.Commands.CheckoutOrder
 {
-    public class CheckoutOrderCommandHandler //: IRequestHandler<CheckoutOrderCommand, int>
+    public class CheckoutOrderCommandHandler : IRequestHandler<CheckoutOrderCommand, int>
     {
         private readonly IOrderRepository _orderRepository;
         private readonly IMapper _mapper;
@@ -27,17 +28,32 @@ namespace Ordering.Application.Features.Commands.CheckoutOrder
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
-        //public async Task<int> Handle(CheckoutOrderCommand request, CancellationToken cancellationToken)
-        //{
-        //    var orderEntity = _mapper.Map<Order>(request);
-        //    var newOrder = await _orderRepository.AddAsync(orderEntity);
 
-        //    _logger.LogInformation($"Order {newOrder.Id} is successfully created");
+        public async Task<int> Handle(CheckoutOrderCommand request, CancellationToken cancellationToken)
+        {
+            var orderEntity = _mapper.Map<Order>(request);
+            var newOrder = await _orderRepository.AddAsync(orderEntity);
 
-        //    await SendMail(newOrder);
+            _logger.LogInformation($"Order {newOrder.Id} is successfully created");
 
-        //    return newOrder.Id;
+            await SendMail(newOrder);
 
-        //}
+            return newOrder.Id;
+
+        }
+
+        private async Task SendMail(Order order)
+        {
+            var email = new Email() { To = "pbiswal029@gmail.com", Body = $"Order was created", Subject = "The order is created" };
+
+            try
+            {
+                await _emailService.SendEmail(email);
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError($"Order {order.Id} failed due to an error with the mail service: {ex.Message}");
+            }
+        }
     }
 }
