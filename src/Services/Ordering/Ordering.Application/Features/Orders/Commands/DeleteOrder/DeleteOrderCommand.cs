@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Ordering.Application.Features.Commands.DeleteOrder
 {
-    class DeleteOrderCommand : IRequest
+    public class DeleteOrderCommand : IRequest
     {
         public int Id { get; set; }
     }
