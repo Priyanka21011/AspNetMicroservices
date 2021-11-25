@@ -8,7 +8,7 @@
         public string ProductId { get; set; }
         public string ProductName { get; set; }
 
-        //Product related additonal fields
+        //Product Related Additional Fields
         public string Category { get; set; }
         public string Summary { get; set; }
         public string Description { get; set; }
