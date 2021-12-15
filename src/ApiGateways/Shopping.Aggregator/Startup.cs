@@ -7,10 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
+using Polly;
+using Polly.Extensions.Http;
+using Serilog;
 using Shopping.Aggregator.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace Shopping.Aggregator
@@ -29,21 +33,62 @@ namespace Shopping.Aggregator
         {
             services.AddTransient<LoggingDelegatingHandler>();
 
-            services.AddHttpClient<ICatalogService, CatalogService>(c => 
+            services.AddHttpClient<ICatalogService, CatalogService>(c =>
                  c.BaseAddress = new Uri(Configuration["ApiSettings:CatalogUrl"]))
-                 .AddHttpMessageHandler<LoggingDelegatingHandler>(); 
-            services.AddHttpClient<IBasketService, BasketService>(c => 
+                 .AddHttpMessageHandler<LoggingDelegatingHandler>()
+                  .AddPolicyHandler(GetRetryPolicy())
+                 .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+            services.AddHttpClient<IBasketService, BasketService>(c =>
                  c.BaseAddress = new Uri(Configuration["ApiSettings:BasketUrl"]))
-                 .AddHttpMessageHandler<LoggingDelegatingHandler>();
-            services.AddHttpClient<IOrderService, OrderService>(c => 
+                 .AddHttpMessageHandler<LoggingDelegatingHandler>()
+                 .AddPolicyHandler(GetRetryPolicy())
+                 .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+            services.AddHttpClient<IOrderService, OrderService>(c =>
                  c.BaseAddress = new Uri(Configuration["ApiSettings:OrderingUrl"]))
-                 .AddHttpMessageHandler<LoggingDelegatingHandler>();
+                 .AddHttpMessageHandler<LoggingDelegatingHandler>()
+                  .AddPolicyHandler(GetRetryPolicy())
+                 .AddPolicyHandler(GetCircuitBreakerPolicy());
 
             services.AddControllers();
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Shopping.Aggregator", Version = "v1" });
             });
+        }
+
+        private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+        {
+            // Retry a specified number of times, using a function to 
+            // calculate the duration to wait between retries based on 
+            // the current retry attempt (allows for exponential backoff)
+            // In this case will wait for
+            //  2 ^ 1 = 2 seconds then
+            //  2 ^ 2 = 4 seconds then
+            //  2 ^ 3 = 8 seconds then
+            //  2 ^ 4 = 16 seconds then
+            //  2 ^ 5 = 32 seconds
+
+            return HttpPolicyExtensions
+                     .HandleTransientHttpError()
+                     .WaitAndRetryAsync(
+                        retryCount: 5,
+                        sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+                        onRetry: (exception, retryCount, context) =>
+                         {
+                             Log.Error($"Retry {retryCount} of {context.PolicyKey} at {context.OperationKey}, due to {exception}");
+                         }
+                );
+        }
+        private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+        {
+            return HttpPolicyExtensions
+                   .HandleTransientHttpError()
+                   .CircuitBreakerAsync(
+                        handledEventsAllowedBeforeBreaking: 5,
+                        durationOfBreak: TimeSpan.FromSeconds(30)
+                );
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
